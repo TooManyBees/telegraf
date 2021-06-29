@@ -112,7 +112,7 @@ func (a *AzureMonitor) Init() error {
 func (a *AzureMonitor) makeRequest() (*http.Response, error) {
 	client := http.Client{}
 
-	url := fmt.Sprintf("https://management.azure.com/%v/providers/microsoft.insights/metricDefinitions?api-version=2018-01-01", a.ResourceId)
+	url := fmt.Sprintf("https://management.azure.com/%v/providers/microsoft.insights/metrics?api-version=2018-01-01", a.ResourceId)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
