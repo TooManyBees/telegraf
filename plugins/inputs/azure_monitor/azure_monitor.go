@@ -142,7 +142,12 @@ func (a *AzureMonitor) Gather(acc telegraf.Accumulator) error {
 	for _, value := range monitorResponse.Value {
 		name := value.Name.Value
 		// FIXME: the format of the the data we're pushing is unspecified right now
-		fields[name] = value.TimeSeries
+		// FIXME: There's two locations here where we actually have multiple data points
+		//        Let's do some data munging and invoke acc.AddFields multiple times with
+		//        varying timestamps (the optional 4th argument) so that we don't lose any
+		//        data.
+		data := value.TimeSeries[0].Data[0]
+		fields[name] = data.Average
 	}
 
 	acc.AddFields("azure_monitor", fields, tags)
