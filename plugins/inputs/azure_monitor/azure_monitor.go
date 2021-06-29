@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
@@ -136,21 +137,38 @@ func (a *AzureMonitor) Gather(acc telegraf.Accumulator) error {
 		return err
 	}
 
-	fields := make(map[string]interface{})
-	tags := make(map[string]string)
+	fieldsByTimestamp := make(map[string]map[string]interface{})
 
+	tags := make(map[string]string)
+	tags["resource_id"] = a.ResourceId
+
+	// There are two arrays in the metrics response, and nested within can be data points
+	// with a variety of different RFC3339 time stamps. Here we'll bucket them all by
+	// timestamp and then invoke telegraf.Accumulator.AddFields once for each different
+	// timestamp.
 	for _, value := range monitorResponse.Value {
 		name := value.Name.Value
-		// FIXME: the format of the the data we're pushing is unspecified right now
-		// FIXME: There's two locations here where we actually have multiple data points
-		//        Let's do some data munging and invoke acc.AddFields multiple times with
-		//        varying timestamps (the optional 4th argument) so that we don't lose any
-		//        data.
-		data := value.TimeSeries[0].Data[0]
-		fields[name] = data.Average
+
+		for _, ts := range value.TimeSeries {
+			for _, datum := range ts.Data {
+				_, exists := fieldsByTimestamp[datum.TimeStamp]
+				if !exists {
+					fieldsByTimestamp[datum.TimeStamp] = make(map[string]interface{})
+				}
+				slot := fieldsByTimestamp[datum.TimeStamp]
+				slot[name] = datum.Average
+			}
+		}
 	}
 
-	acc.AddFields("azure_monitor", fields, tags)
+	for ts, fields := range fieldsByTimestamp {
+		timestamp, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			continue
+		}
+
+		acc.AddFields("azure_monitor", fields, tags, timestamp)
+	}
 
 	return nil
 }
